@@ -1,68 +1,84 @@
-import sys
 import re
-import pandas as pd
+import sys
 import nltk
 import pickle
+import pandas as pd
 
-nltk.download('stopwords')
-
-from nltk.stem.porter import PorterStemmer
 from sqlalchemy import create_engine
 from sklearn.metrics import confusion_matrix
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.pipeline import Pipeline, FeatureUnion
-from sklearn.multioutput import MultiOutputClassifier
 from sklearn.model_selection import train_test_split
-from sklearn.model_selection import GridSearchCV
-from sklearn.feature_extraction.text import CountVectorizer, TfidfTransformer
-
-from nltk.corpus import stopwords
-from custom_transformer import StartingVerbExtractor
+from sklearn.multioutput import MultiOutputClassifier
+from sklearn.base import BaseEstimator,TransformerMixin
+from sklearn.feature_extraction.text import TfidfTransformer, CountVectorizer
 
 def load_data(database_filepath):
     engine = create_engine('sqlite:///' + database_filepath)
     df = pd.read_sql_table('DisasterResponse', con = engine)
+    # since the values are all 0 in child_alone, we drop this colomn
+    df = df.drop('child_alone', axis=1)
     X = df['message']
     y = df.iloc[:,4:]
     category_names = y.columns
+    # for test
+    # print(X)
+    # print(y)
+    # print(category_names)
     return X, y, category_names
 
 
 def tokenize(text):
-    # Normalize
-    text = re.sub(r"[^a-zA-Z0-9]", " ", text.lower())
-    # Tokenize
-    words = text.split()
-    # Remove stop words
-    words = [w for w in words if w not in stopwords.words("english")]
-    # stemming
-    stemmed = [PorterStemmer().stem(w) for w in words]
-    return stemmed
+    # The first step, i replace the url in message to avoid its influence 
+    url_regex = 'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+'
+    detected_urls = re.findall(url_regex, text)
+    for detected_url in detected_urls:
+        text = text.replace(detected_url, 'urlplaceholder')
+
+    # The second step is to extract the words from step, we could use word_tokenize
+    words = nltk.word_tokenize(text)
+
+    # The third step, lemmatizer to get the original form of the words and clean them
+    lemmatizer = nltk.WordNetLemmatizer()
+    clean_tokens = [lemmatizer.lemmatize(w).lower().strip() for w in words]
+    # print(clean_tokens)
+    return clean_tokens
+
+class StartingVerbExtractor(BaseEstimator, TransformerMixin):
+    # this part i take from ML Learning part,  
+    def starting_verb(self, text):
+        sentence_list = nltk.sent_tokenize(text)
+        for sentence in sentence_list:
+            pos_tags = nltk.pos_tag(tokenize(sentence))
+            first_word, first_tag = pos_tags[0]
+            if first_tag in ['VB', 'VBP'] or first_word == 'RT':
+                return True
+        return False
+
+    def fit(self, X, y=None):
+        return self
+
+    def transform(self, X):
+        X_tagged = pd.Series(X).apply(self.starting_verb)
+        return pd.DataFrame(X_tagged)
 
 def build_model():
     pipeline = Pipeline([
         ('features', FeatureUnion([
-            
+
             ('text_pipeline', Pipeline([
-                ('vect', CountVectorizer(tokenizer=tokenize)),
-                ('tfidf', TfidfTransformer())
+                ('count_vectorizer', CountVectorizer(tokenizer=tokenize)),
+                ('tfidf_transformer', TfidfTransformer())
             ])),
 
-            ('starting_verb', StartingVerbExtractor())
+            ('starting_verb_transformer', StartingVerbExtractor())
         ])),
 
-        ('clf', MultiOutputClassifier(RandomForestClassifier()))
+        ('classifier', MultiOutputClassifier(RandomForestClassifier()))
     ])
-    
-    parameters = {
-        'features__text_pipeline__vect__ngram_range': ((1, 1), (1, 2)),
-        'clf__n_estimators': [50, 100, 200],
-        'clf__min_samples_split': [2, 3, 4]
-    }
 
-    cv = GridSearchCV(pipeline, param_grid=parameters)
+    return pipeline
 
-    return cv
 
 def evaluate_model(model, X_test, Y_test, category_names):
     Y_pred = model.predict(X_test)
@@ -73,6 +89,7 @@ def evaluate_model(model, X_test, Y_test, category_names):
     print("Confusion Matrix:\n", confusion_mat)
     print("Accuracy:", accuracy)
     print("\nBest Parameters:", model.best_params_)
+
 
 def save_model(model, model_filepath):
     pickle.dump(model, open(model_filepath, 'wb'))
@@ -88,10 +105,6 @@ def main():
         print('Building model...')
         model = build_model()
         
-        #add tokenize part before fit the model 
-        X_train = tokenize(X_train)
-        X_test = tokenize(X_test)
-
         print('Training model...')
         model.fit(X_train, Y_train)
         
