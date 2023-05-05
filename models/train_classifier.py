@@ -18,8 +18,10 @@ def load_data(database_filepath):
     df = pd.read_sql_table('DisasterResponse', con = engine)
     # since the values are all 0 in child_alone, we drop this colomn
     df = df.drop('child_alone', axis=1)
+    print(df)
     X = df['message']
     y = df.iloc[:,4:]
+    y['related']=y['related'].map(lambda x: 1 if x == 2 else x)
     category_names = y.columns
     # for test
     # print(X)
