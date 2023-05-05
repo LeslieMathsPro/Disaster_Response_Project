@@ -21,7 +21,6 @@ def load_data(database_filepath):
     print(df)
     X = df['message']
     y = df.iloc[:,4:]
-    y['related']=y['related'].map(lambda x: 1 if x == 2 else x)
     category_names = y.columns
     # for test
     # print(X)

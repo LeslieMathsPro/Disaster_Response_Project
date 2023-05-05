@@ -22,7 +22,7 @@ def clean_data(df):
     df = pd.concat([df, categories], axis = 1)
     df.drop_duplicates(inplace=True)
 
-    # delete the observation with relate = 2
+    # modify the observation with related == 2 to related = 1
     df['related'] = df['related'].map(lambda x: 1 if x == 2 else x)
     return df
 
