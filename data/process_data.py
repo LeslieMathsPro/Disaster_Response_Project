@@ -1,3 +1,4 @@
+import os
 import sys
 import pandas as pd
 from sqlalchemy import create_engine
@@ -56,6 +57,7 @@ def save_data(df, database_filename):
         database_filename -> Path to SQLite destination database
     """
     engine = create_engine('sqlite:///'+database_filename)
+    table_name = os.path.basename(database_filename).replace(".db","") + "_table"
     df.to_sql('DisasterResponse', engine, index=False)
 
 def main():
