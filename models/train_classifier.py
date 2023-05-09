@@ -6,8 +6,9 @@ import pandas as pd
 
 from sqlalchemy import create_engine
 from sklearn.metrics import confusion_matrix
+from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import classification_report
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier
 from sklearn.pipeline import Pipeline, FeatureUnion
 from sklearn.model_selection import train_test_split
 from sklearn.multioutput import MultiOutputClassifier
@@ -15,38 +16,62 @@ from sklearn.base import BaseEstimator,TransformerMixin
 from sklearn.feature_extraction.text import TfidfTransformer, CountVectorizer
 
 def load_data(database_filepath):
+    """
+    Load Data from the Database
+
+    Arguments:
+        database_filepath -> Path to SQLite destination database
+    Output:
+        X -> Dataframe containing features
+        y -> Dataframe containing labels
+        category_names -> List of categories name
+    """
     engine = create_engine('sqlite:///' + database_filepath)
     df = pd.read_sql_table('DisasterResponse', con = engine)
+
     # since the values are all 0 in child_alone, we drop this colomn
     df = df.drop('child_alone', axis=1)
-    print(df)
+
+    # I always get an Error at first, after asked this ValueError in Knowledge, i set the related = 2 to related = 1
+    df['related']=df['related'].map(lambda x: 1 if x == 2 else x)
+
     X = df['message']
     y = df.iloc[:,4:]
+
     category_names = y.columns
-    # for test
-    # print(X)
-    # print(y)
-    # print(category_names)
     return X, y, category_names
 
 
-def tokenize(text):
+def tokenize(text, url_place_holder_string="urlplaceholder"):
+    """
+    Tokenize the text
+
+    Arguments:
+        text -> Text message which needs to be tokenized
+    Output:
+        clean_tokens -> List of tokens extracted from the provided text
+    """
     # The first step, i replace the url in message to avoid its influence 
     url_regex = 'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+'
     detected_urls = re.findall(url_regex, text)
     for detected_url in detected_urls:
-        text = text.replace(detected_url, 'urlplaceholder')
+        text = text.replace(detected_url, url_place_holder_string)
 
     # The second step is to extract the words from step, we could use word_tokenize
-    words = nltk.word_tokenize(text)
+    tokens = nltk.word_tokenize(text)
 
     # The third step, lemmatizer to get the original form of the words and clean them
     lemmatizer = nltk.WordNetLemmatizer()
-    clean_tokens = [lemmatizer.lemmatize(w).lower().strip() for w in words]
-    # print(clean_tokens)
+    clean_tokens = [lemmatizer.lemmatize(w).lower().strip() for w in tokens]
     return clean_tokens
 
 class StartingVerbExtractor(BaseEstimator, TransformerMixin):
+    """
+    Starting Verb Extractor class
+    
+    This class extract the starting verb of a sentence,
+    creating a new feature for the ML classifier
+    """
     # this part i take from ML Learning part,  
     def starting_verb(self, text):
         sentence_list = nltk.sent_tokenize(text)
@@ -65,6 +90,12 @@ class StartingVerbExtractor(BaseEstimator, TransformerMixin):
         return pd.DataFrame(X_tagged)
 
 def build_model():
+    """
+    Build Pipeline
+
+    Output: 
+        the model (Pipeline) that process text messages and apply a classifier
+    """
     pipeline = Pipeline([
         ('features', FeatureUnion([
 
@@ -76,21 +107,29 @@ def build_model():
             ('starting_verb_transformer', StartingVerbExtractor())
         ])),
 
-        ('classifier', MultiOutputClassifier(RandomForestClassifier()))
+        ('clf', MultiOutputClassifier(RandomForestClassifier()))
     ])
+
+    # for this setting, i only do the GridSearchCV very clear 
+    # because it will overload the limitation of Github, if GridSearchCV works a lot
+    # i want to upload the code in grey, they can work, but when i upload them on Github
+    # remote: error: File models/classifier.pkl is 232.90 MB; this exceeds GitHub's file size limit of 100.00 MB
+    # remote: error: File models/classifier.pkl is 262.43 MB; this exceeds GitHub's file size limit of 100.00 MB
+
+    #param_grid = {
+        #  'clf__estimator__n_estimators': [1, 101, 10],
+        #  'clf__estimator__max_features': [1, 10, 1]
+    #}
+    #model = GridSearchCV(pipeline, param_grid=param_grid, n_jobs=2, verbose=2, cv=2)
 
     return pipeline
 
 
-def evaluate_model(model, X_test, Y_test, category_names):
-    Y_pred = model.predict(X_test)
-    confusion_mat = classification_report(Y_test, Y_pred, labels = category_names)
-    accuracy = (Y_pred == Y_test).mean()
 
-    print("Labels:", category_names)
-    print("Confusion Matrix:\n", confusion_mat)
-    print("Accuracy:", accuracy)
-    print("\nBest Parameters:", model.best_params_)
+def evaluate_model(model, X_test, Y_test, category_names):
+    y_pred = model.predict(X_test)
+    class_report = classification_report(Y_test, y_pred, target_names=category_names)
+    print(class_report)
 
 
 def save_model(model, model_filepath):
