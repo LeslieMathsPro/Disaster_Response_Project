@@ -3,16 +3,36 @@ import pandas as pd
 from sqlalchemy import create_engine
 
 def load_data(messages_filepath, categories_filepath):
+    """
+    Load data from file path
+
+    Arguments:
+        messages_filepath -> Path to the CSV file containing messages
+        categories_filepath -> Path to the CSV file containing categories
+    
+    Output:
+        df -> dataframe with messages and categories
+    """
     messages = pd.read_csv(messages_filepath)
     categories = pd.read_csv(categories_filepath)    
     df = pd.merge(messages, categories, on = 'id')
     return df
 
 def clean_data(df):
+    """
+    Clean the categories dataframe
+
+    Arguments:
+        df -> dataframe with message and categories
+    
+    Output:
+        df -> dataframe with message and cleaned categories
+    """
     categories = df['categories'].str.split(';', expand = True)
     row = categories.iloc[0]
     category_colnames = row.apply(lambda x: x[:-2])
     categories.columns = category_colnames
+
     for column in categories:
         categories[column] = categories[column].astype(str)
         categories[column] = categories[column].str[-1]
@@ -23,15 +43,28 @@ def clean_data(df):
     df.drop_duplicates(inplace=True)
 
     # modify the observation with related == 2 to related = 1
-    df['related'] = df['related'].map(lambda x: 1 if x == 2 else x)
+    # df['related'] = df['related'].map(lambda x: 1 if x == 2 else x)
     return df
 
 
 def save_data(df, database_filename):
+    """
+    Save Data to SQLite Database
+    
+    Arguments:
+        df -> Dataframe with messages and cleaned categories
+        database_filename -> Path to SQLite destination database
+    """
     engine = create_engine('sqlite:///'+database_filename)
     df.to_sql('DisasterResponse', engine, index=False)
 
 def main():
+    """
+    Main function which will kick off the data processing functions :
+        1) Load Messages Data with Categories
+        2) Clean Categories Data
+        3) Save Data to SQLite Database
+    """
     if len(sys.argv) == 4:
 
         messages_filepath, categories_filepath, database_filepath = sys.argv[1:]

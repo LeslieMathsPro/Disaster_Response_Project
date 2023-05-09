@@ -6,6 +6,7 @@ import pandas as pd
 
 from sqlalchemy import create_engine
 from sklearn.metrics import confusion_matrix
+from sklearn.metrics import classification_report
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.pipeline import Pipeline, FeatureUnion
 from sklearn.model_selection import train_test_split
@@ -83,7 +84,7 @@ def build_model():
 
 def evaluate_model(model, X_test, Y_test, category_names):
     Y_pred = model.predict(X_test)
-    confusion_mat = confusion_matrix(Y_test, Y_pred, labels = category_names)
+    confusion_mat = classification_report(Y_test, Y_pred, labels = category_names)
     accuracy = (Y_pred == Y_test).mean()
 
     print("Labels:", category_names)
