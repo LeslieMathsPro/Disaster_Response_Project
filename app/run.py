@@ -1,6 +1,6 @@
 import json
-import plotly
 import nltk
+import plotly
 import pandas as pd
 
 from nltk.stem import WordNetLemmatizer
@@ -12,7 +12,7 @@ from plotly.graph_objs import Bar
 #from sklearn.externals import joblib
 import joblib
 from sqlalchemy import create_engine
-from sklearn.base import BaseEstimator,TransformerMixin
+from sklearn.base import BaseEstimator, TransformerMixin
 
 
 app = Flask(__name__)
@@ -59,7 +59,6 @@ df = pd.read_sql_table('DisasterResponse', engine)
 # load model
 model = joblib.load("../models/classifier.pkl")
 
-
 # index webpage displays cool visuals and receives user input text for model
 @app.route('/')
 @app.route('/index')
@@ -70,6 +69,9 @@ def index():
     genre_counts = df.groupby('genre').count()['message']
     genre_names = list(genre_counts.index)
     
+    # show the top five categories for visuals
+    top_category_count = df.iloc[:,4:].sum().sort_values(ascending=False)[1:6]
+    top_category_names = list(top_category_count.index)
     # create visuals
     # TODO: Below is an example - modify to create your own visuals
     graphs = [
@@ -90,9 +92,29 @@ def index():
                     'title': "Genre"
                 }
             }
+        },
+
+        # GRAPH 2 - category graph    
+        {
+            'data': [
+                Bar(
+                    x=top_category_names,
+                    y=top_category_count
+                )
+            ],
+
+            'layout': {
+                'title': 'Top Five Categories',
+                'yaxis': {
+                    'title': "Count"
+                },
+                'xaxis': {
+                    'title': "Categories"
+                }
+            }
         }
     ]
-    
+
     # encode plotly graphs in JSON
     ids = ["graph-{}".format(i) for i, _ in enumerate(graphs)]
     graphJSON = json.dumps(graphs, cls=plotly.utils.PlotlyJSONEncoder)
